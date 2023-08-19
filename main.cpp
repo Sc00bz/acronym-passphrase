@@ -8,266 +8,9 @@
 #include <string>
 #include <vector>
 #include "csprng.h"
+#include "bigint.h"
 
 using namespace std;
-
-class BigInt
-{
-public:
-	BigInt()           {m_num = new uint32_t[1]; m_num[0] = 0; m_numSize = 1;}
-	BigInt(uint32_t n) {m_num = new uint32_t[1]; m_num[0] = n; m_numSize = 1;}
-	BigInt(const BigInt &n)
-	{
-		size_t numSize = n.m_numSize;
-
-		m_num = new uint32_t[numSize];
-		for (size_t i = 0; i < numSize; i++)
-		{
-			m_num[i] = n.m_num[i];
-		}
-		m_numSize = numSize;
-	}
-	~BigInt() {delete [] m_num;}
-
-	BigInt &operator=(const BigInt &n)
-	{
-		size_t numSize = n.m_numSize;
-
-		delete [] m_num;
-		m_num = new uint32_t[numSize];
-		for (size_t i = 0; i < numSize; i++)
-		{
-			m_num[i] = n.m_num[i];
-		}
-		m_numSize = numSize;
-		return *this;
-	}
-
-	void set(uint32_t n)
-	{
-		m_num[0] = n;
-		m_numSize = 1;
-	}
-
-	double get() const
-	{
-		double          next = 4294967296.0;
-		double          ret  = 0.0;
-		const uint32_t *num  = m_num;
-		size_t          i    = m_numSize;
-
-		while (i != 0)
-		{
-			i--;
-			ret *= next;
-			ret += num[i];
-		}
-		return ret;
-	}
-
-	void print() const
-	{
-		const uint32_t *num = m_num;
-		size_t          i   = m_numSize - 1;
-		ios             oldState(NULL);
-
-		oldState.copyfmt(cout);
-		cout << hex << num[i];
-		cout.fill('0');
-		cout.width(8);
-		while (i != 0)
-		{
-			i--;
-			cout << num[i];
-		}
-		cout.copyfmt(oldState);
-	}
-
-	void mul(uint32_t n)
-	{
-		uint32_t *num      = m_num;
-		size_t    numSize  = m_numSize;
-		uint32_t  overflow = 0;
-
-		for (size_t i = 0; i < numSize; i++)
-		{
-			uint64_t tmp = (uint64_t) n * num[i] + overflow;
-			num[i] = (uint32_t) tmp;
-			overflow = (uint32_t) (tmp >> 32);
-		}
-		if (overflow != 0)
-		{
-			uint32_t *tmp = new uint32_t[numSize + 1];
-			for (size_t i = 0; i < numSize; i++)
-			{
-				tmp[i] = num[i];
-			}
-			tmp[numSize] = overflow;
-			delete [] num;
-			m_num     = tmp;
-			m_numSize = numSize + 1;
-		}
-	}
-
-	void add(const BigInt &n)
-	{
-		uint32_t       *numA     = m_num;
-		const uint32_t *numB     = n.m_num;
-		size_t          numSizeA = m_numSize;
-		size_t          numSizeB = n.m_numSize;
-		uint32_t        overflow = 0;
-
-		if (numSizeA < numSizeB)
-		{
-			uint32_t *tmp = new uint32_t[numSizeB];
-			for (size_t i = 0; i < numSizeA; i++)
-			{
-				tmp[i] = numA[i];
-			}
-			for (size_t i = numSizeA; i < numSizeB; i++)
-			{
-				tmp[i] = 0;
-			}
-			delete [] numA;
-			numA      = tmp;
-			m_num     = tmp;
-			m_numSize = numSizeB;
-		}
-		for (size_t i = 0; i < numSizeB; i++)
-		{
-			uint64_t tmp = (uint64_t) numA[i] + numB[i] + overflow;
-			numA[i] = (uint32_t) tmp;
-			overflow = (uint32_t) (tmp >> 32);
-		}
-		for (size_t i = numSizeB; i < numSizeA && overflow != 0; i++)
-		{
-			uint64_t tmp = (uint64_t) numA[i] + overflow;
-			numA[i] = (uint32_t) tmp;
-			overflow = (uint32_t) (tmp >> 32);
-		}
-		if (overflow != 0)
-		{
-			uint32_t *tmp = new uint32_t[numSizeA + 1];
-			for (size_t i = 0; i < numSizeA; i++)
-			{
-				tmp[i] = numA[i];
-			}
-			tmp[numSizeA] = overflow;
-			delete [] numA;
-			m_num     = tmp;
-			m_numSize = numSizeA + 1;
-		}
-	}
-
-	int sub(const BigInt &n)
-	{
-		uint32_t       *numA     = m_num;
-		const uint32_t *numB     = n.m_num;
-		size_t          numSizeA = m_numSize;
-		size_t          numSizeB = n.m_numSize;
-		uint32_t        overflow = 0;
-
-		if (numSizeA < numSizeB)
-		{
-			uint32_t *tmp = new uint32_t[1];
-			tmp[0] = 0;
-			delete [] numA;
-			m_num     = tmp;
-			m_numSize = 1;
-			return 1;
-		}
-		for (size_t i = 0; i < numSizeB; i++)
-		{
-			uint64_t tmp = (uint64_t) numA[i] - numB[i] - overflow;
-			numA[i] = (uint32_t) tmp;
-			overflow = 0 - (uint32_t) (tmp >> 32);
-		}
-		for (size_t i = numSizeB; i < numSizeA && overflow != 0; i++)
-		{
-			uint64_t tmp = (uint64_t) numA[i] + overflow;
-			numA[i] = (uint32_t) tmp;
-			overflow = (uint32_t) (tmp >> 32);
-		}
-		if (overflow != 0)
-		{
-			uint32_t *tmp = new uint32_t[1];
-			tmp[0] = 0;
-			delete [] numA;
-			m_num     = tmp;
-			m_numSize = 1;
-			return 1;
-		}
-		while (numSizeA > 1 && numA[numSizeA - 1] == 0)
-		{
-			numSizeA--;
-		}
-		m_numSize = numSizeA;
-
-		return 0;
-	}
-
-	int comp(const BigInt &n) const
-	{
-		const uint32_t *numA     = m_num;
-		const uint32_t *numB     = n.m_num;
-		size_t          numSizeA = m_numSize;
-		size_t          numSizeB = n.m_numSize;
-
-		if (numSizeA < numSizeB)
-		{
-			return -1;
-		}
-		if (numSizeA > numSizeB)
-		{
-			return 1;
-		}
-		size_t i = numSizeA;
-		while (i != 0)
-		{
-			i--;
-			if (numA[i] < numB[i])
-			{
-				return -1;
-			}
-			if (numA[i] > numB[i])
-			{
-				return 1;
-			}
-		}
-		return 0;
-	}
-
-	BigInt randomModSelf()
-	{
-		BigInt ret;
-
-		// Init ret
-		delete [] ret.m_num;
-		ret.m_num = new uint32_t[m_numSize];
-		ret.m_numSize = m_numSize;
-
-		// Find mask
-		uint32_t mask = 0xffffffff;
-		uint32_t hi   = m_num[m_numSize - 1];
-		while (mask >> 1 > hi)
-		{
-			mask >>= 1;
-		}
-
-		// Find random number
-		do
-		{
-			Csprng::get(ret.m_num, ret.m_numSize * sizeof(uint32_t));
-			ret.m_num[ret.m_numSize - 1] &= mask;
-		} while (ret.comp(*this) >= 0);
-
-		return ret;
-	}
-
-private:
-	uint32_t *m_num;
-	size_t    m_numSize;
-};
 
 struct wordKeySpace
 {
@@ -276,6 +19,9 @@ struct wordKeySpace
 	BigInt keySpaceSum;
 };
 
+/**
+ * Used for binary search: lower_bound().
+ */
 bool operator<(const wordKeySpace &a, const wordKeySpace &b)
 {
 	if (a.keySpaceSum.comp(b.keySpaceSum) < 0)
@@ -285,14 +31,18 @@ bool operator<(const wordKeySpace &a, const wordKeySpace &b)
 	return 0;
 }
 
-vector<vector<wordKeySpace>> g_byLength;
-vector<vector<string>>       g_byLetter(26);
-vector<BigInt>               g_byLengthKeySpace;
-
-int readWords(const char *fileName)
+/**
+ * Reads words from file into both byLength and byLetter.
+ *
+ * All words that of length N go into byLength[N].
+ * All words that start with X go into byLetter[lowercase(X) - 'a'].
+ *
+ * Returns number of words, or 0 if error.
+ */
+uint32_t readWords(const char *fileName, vector<vector<wordKeySpace>> &byLength, vector<vector<string>> &byLetter)
 {
-	vector<list<wordKeySpace>> byLength;
-	vector<list<string>>       byLetter(26);
+	vector<list<wordKeySpace>> byLengthList;
+	vector<list<string>>       byLetterList(26);
 	FILE *fin = fopen(fileName, "r");
 	uint32_t count = 0;
 	char  word[256];
@@ -301,7 +51,7 @@ int readWords(const char *fileName)
 	{
 		perror("Error fopen()");
 		cerr << "fopen(\"" << fileName << "\")" << endl;
-		return 1;
+		return 0;
 	}
 
 	while (fgets(word, 256, fin) != NULL)
@@ -317,94 +67,185 @@ int readWords(const char *fileName)
 			}
 		}
 		word[len] = 0;
-		while (len >= byLength.size())
+		while (len >= byLengthList.size())
 		{
 			list<wordKeySpace> tmp;
-			byLength.push_back(tmp);
+			byLengthList.push_back(tmp);
 		}
 		wordKeySpace tmp = {word};
-		byLength[len].push_back(tmp);
-		byLetter[(word[0] | 32) - 97].push_back(word);
+		byLengthList[len].push_back(tmp);
+		byLetterList[(word[0] | 32) - 97].push_back(word);
 		count++;
 	}
 	if (feof(fin) == 0)
 	{
 		perror("Error fgets()");
-		return 1;
+		return 0;
 	}
 
-	// Copy to g_byLength and g_byLetter vectors
-	size_t size = byLength.size();
-	g_byLength.resize(size);
+	// Copy to byLength and byLetter vectors
+	size_t size = byLengthList.size();
+	byLength.resize(size);
 	for (size_t i = 0; i < size; i++)
 	{
-		size_t size2 = byLength[i].size();
-		g_byLength[i].resize(size2);
+		size_t size2 = byLengthList[i].size();
+		byLength[i].resize(size2);
 		for (size_t j = 0; j < size2; j++)
 		{
-			g_byLength[i][j] = byLength[i].front();
-			byLength[i].pop_front();
+			byLength[i][j] = byLengthList[i].front();
+			byLengthList[i].pop_front();
 		}
 	}
-	g_byLetter.resize(26);
+	byLetter.resize(26);
 	for (size_t i = 0; i < 26; i++)
 	{
-		size_t size2 = byLetter[i].size();
-		g_byLetter[i].resize(size2);
+		size_t size2 = byLetterList[i].size();
+		byLetter[i].resize(size2);
 		for (size_t j = 0; j < size2; j++)
 		{
-			g_byLetter[i][j] = byLetter[i].front();
-			byLetter[i].pop_front();
+			byLetter[i][j] = byLetterList[i].front();
+			byLetterList[i].pop_front();
 		}
 	}
 
-	cout << "Words: " << count << endl;
-
-	return 0;
+	return count;
 }
 
-void getByLengthKeySpaces()
+/**
+ * Sets byLength's .keySpace and .keySpaceSum:
+ *   byLength[N][i].keySpace is the key space of the acronym "byLength[N][i].word".
+ *   byLength[N][i].keySpaceSum is the sum of all key spaces of the prior acronyms of length N and the
+ *     current acronym (i.e. sum of byLength[N][x].keySpace for x = 0 to i).
+ *
+ * Sets byLengthKeySpace[N] to total key space of all words of length N:
+ *   byLengthKeySpace[N] is set to byLength[N]["last"].keySpaceSum or 0 when byLength[N] is empty.
+ */
+void setByLengthKeySpaces(vector<vector<wordKeySpace>> &byLength, vector<BigInt> &byLengthKeySpace, const vector<vector<string>> &byLetter)
 {
 	uint32_t byLetterCount[26];
 
 	for (int i = 0; i < 26; i++)
 	{
-		byLetterCount[i] = (uint32_t) (g_byLetter[i].size());
+		byLetterCount[i] = (uint32_t) (byLetter[i].size());
 	}
 
 	// Calculate key spaces
-	g_byLengthKeySpace.clear();
-	for (auto it = g_byLength.begin(), end = g_byLength.end(); it != end; ++it)
+	byLengthKeySpace.clear();
+	byLengthKeySpace.reserve(byLength.size());
+	for (auto itByLength = byLength.begin(), end = byLength.end(); itByLength != end; ++itByLength)
 	{
-		BigInt byLengthKeySpace;
+		BigInt byLengthKeySpace_;
 
-		for (auto it2 = it->begin(), end2 = it->end(); it2 != end2; ++it2)
+		for (auto itAcronym = itByLength->begin(), end2 = itByLength->end(); itAcronym != end2; ++itAcronym)
 		{
-			const char *word = it2->word.c_str();
-			BigInt *keySpace = &(it2->keySpace);
+			const char *word = itAcronym->word.c_str();
 			char ch = word[0];
 
-			keySpace->set(1);
+			itAcronym->keySpace.set(1);
 			for (int i = 0; ch != 0;)
 			{
 				size_t letter = (ch | 32) - 97;
 				if (letter > 25)
 				{
-					cerr << "Error: Invalid letter... memory coruption?" << endl;
+					cerr << "Error: Invalid letter... memory corruption?" << endl;
 					exit(1);
 				}
-				keySpace->mul(byLetterCount[letter]);
+				itAcronym->keySpace.mul(byLetterCount[letter]);
 				ch = word[++i];
 			}
-			byLengthKeySpace.add(*keySpace);
-			it2->keySpaceSum = byLengthKeySpace;
+			byLengthKeySpace_.add(itAcronym->keySpace);
+			itAcronym->keySpaceSum = byLengthKeySpace_;
 		}
-		g_byLengthKeySpace.push_back(byLengthKeySpace);
+		byLengthKeySpace.push_back(byLengthKeySpace_);
 	}
+}
+
+/**
+ * Gets the minimum acronym length that meets the entropy requirement.
+ *
+ * Returns acronym length, or 0 if error.
+ */
+size_t getAcronymLength(int entropy, const vector<BigInt> &byLengthKeySpace)
+{
+	int length = 1;
+
+	for (; length < byLengthKeySpace.size(); length++)
+	{
+		double value = byLengthKeySpace[length].get();
+		if (value != 0.0 && entropy <= log2(value))
+		{
+			break;
+		}
+	}
+	if (length >= byLengthKeySpace.size())
+	{
+		length = 0;
+	}
+	return length;
+}
+
+/**
+ * Generates a random acronym of a specific length.
+ */
+string generateAcronym(size_t length, const vector<vector<wordKeySpace>> &byLength, const vector<BigInt> &byLengthKeySpace)
+{
+	const BigInt ONE(1);
+
+	wordKeySpace searchValue;
+
+	if (byLength[length].size() == 0)
+	{
+		return "";
+	}
+
+	// A random value 1 to byLengthKeySpace[length]
+	searchValue.keySpaceSum = byLengthKeySpace[length].randomModSelf();
+	searchValue.keySpaceSum.add(ONE);
+
+	// Binary search for the smallest keySpaceSum that's at least as large as searchValue.keySpaceSum
+	return lower_bound(byLength[length].begin(), byLength[length].end(), searchValue)->word;
+}
+
+/**
+ * Generates a random passphrase from an acronym.
+ */
+string generatePassphrase(const string &acronym, const vector<vector<string>> &byLetter)
+{
+	string passphrase;
+
+	for (size_t i = 0, size = acronym.size(); i < size; i++)
+	{
+		// Get next letter from acronym
+		size_t letter = (acronym[i] | 32) - 97;
+		if (letter > 25)
+		{
+			cerr << "Error: Invalid letter... memory corruption?" << endl;
+			exit(1);
+		}
+
+		// Generate random word that starts with letter
+		uint32_t randomWord;
+		Csprng::getInt(randomWord, 0, (uint32_t) (byLetter[letter].size() - 1));
+		if (passphrase.size())
+		{
+			passphrase += "-";
+			passphrase += byLetter[letter][randomWord];
+		}
+		else
+		{
+			passphrase = byLetter[letter][randomWord];
+		}
+	}
+
+	return passphrase;
 }
 
 int main(int argc, char *argv[])
 {
+	vector<vector<wordKeySpace>> byLength;
+	vector<vector<string>>       byLetter;
+	vector<BigInt>               byLengthKeySpace;
+
 	// Usage
 	if (argc != 2)
 	{
@@ -413,85 +254,73 @@ int main(int argc, char *argv[])
 	}
 
 	// Read word list
-	if (readWords(argv[1]))
+	uint32_t numWords = readWords(argv[1], byLength, byLetter);
+	if (numWords == 0)
 	{
 		return 1;
 	}
+	cout << "Words: " << numWords << endl << endl;
 
 	// Print by first letter words
 	for (int i = 0; i < 26; i++)
 	{
-		cout << (char) ('a' + i) << ": " << g_byLetter[i].size() << endl;
+		cout << (char) ('a' + i) << ": " << byLetter[i].size() << endl;
 	}
 	cout << endl;
 
-	getByLengthKeySpaces();
+	// Set key spaces
+	setByLengthKeySpaces(byLength, byLengthKeySpace, byLetter);
 
 	// Print by length key spaces
-	uint32_t maxBits = 0;
-	for (int i = 0; i < g_byLength.size(); i++)
+	uint32_t maxEntropy = 0;
+	for (int i = 0; i < byLength.size(); i++)
 	{
-		double value = g_byLengthKeySpace[i].get();
+		double value = byLengthKeySpace[i].get();
 		if (value != 0.0)
 		{
 			value = log2(value);
 			uint32_t value32 = (uint32_t) floor(value);
-			if (maxBits < value32)
+			if (maxEntropy < value32)
 			{
-				maxBits = value32;
+				maxEntropy = value32;
 			}
-			cout << i << " (" << g_byLength[i].size() << " words): 2^" << value << " (0x";
-			g_byLengthKeySpace[i].print();
+			cout << i << " (" << byLength[i].size() << " words): 2^" << value << " (0x";
+			byLengthKeySpace[i].print();
 			cout << ")" << endl;
 		}
 	}
+	cout << endl;
 
 	while (1)
 	{
-		uint32_t bits;
+		uint32_t entropy;
 
-		cout << "Passphase entropy bits (max " << maxBits << "):" << endl;
-		cin >> bits;
-
-		int length = 0;
-		for (; length < g_byLength.size(); length++)
+		cout << "Passphrase entropy bits (max " << maxEntropy << "): ";
+		cin >> entropy;
+		if (cin.eof() || cin.fail())
 		{
-			double value = g_byLengthKeySpace[length].get();
-			if (value != 0.0 && bits <= log2(value))
-			{
-				cout << "Key space: 2^" << log2(value) << endl;
-				break;
-			}
+			break;
 		}
-		if (length >= g_byLength.size())
+
+		// Get the minimum acronym length that meets the entropy requirement
+		size_t length = getAcronymLength(entropy, byLengthKeySpace);
+		if (length == 0)
 		{
-			cout << "Error: passphase entropy bits too high" << endl;
+			cout << "Error: Passphrase entropy bits too high" << endl;
 			continue;
 		}
 
 		// Get passphrase acronym
-		wordKeySpace searchValue;
-		searchValue.keySpaceSum = g_byLengthKeySpace[length].randomModSelf();
-
-		auto acronymIt = lower_bound(g_byLength[length].begin(), g_byLength[length].end(), searchValue);
-		string acronym = acronymIt->word;
-		cout << acronym << ":";
+		string acronym = generateAcronym(length, byLength, byLengthKeySpace);
 
 		// Get passphrase
-		for (size_t i = 0, size = acronym.size(); i < size; i++)
-		{
-			size_t letter = (acronym[i] | 32) - 97;
-			if (letter > 25)
-			{
-				cerr << "Error: Invalid letter... memory coruption?" << endl;
-				exit(1);
-			}
+		string passphrase = generatePassphrase(acronym, byLetter);
 
-			uint32_t randomWord;
-			Csprng::getInt(randomWord, 0, (uint32_t) (g_byLetter[letter].size() - 1));
-			cout << " " << g_byLetter[letter][randomWord];
-		}
-		cout << endl << endl;
+		// Print key space and acronym passphrase
+		cout << endl;
+		cout << "Acronym length:     " << length << endl;
+		cout << "Key space:          2^" << log2(byLengthKeySpace[length].get()) << endl;
+		cout << "Acronym/passphrase: " << acronym << ": " << passphrase << endl << endl;
 	}
 
 	return 0;
